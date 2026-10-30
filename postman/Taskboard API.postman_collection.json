@@ -1,0 +1,392 @@
+{
+  "info": {
+    "_postman_id": "36b07b0f-24f3-4f82-93b0-f6f312244341",
+    "name": "Taskboard API",
+    "description": "Run in order with the Postman Collection Runner. Tests auth, task ownership, task fields, recurrence, ordering, and task cleanup. Test accounts are left in the database with postman-...@example.test emails.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Reject short password (400)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;",
+              "pm.collectionVariables.set('email', `postman-${runId}@example.test`);",
+              "pm.collectionVariables.set('secondEmail', `postman-second-${runId}@example.test`);",
+              "pm.collectionVariables.set('password', `Postman-${runId}-Aa1`);",
+              "pm.collectionVariables.set('secondPassword', `Postman-${runId}-Bb2`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('Short password returns 400', () => pm.response.to.have.status(400));"]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Postman Test User\",\"email\":\"{{email}}\",\"password\":\"123\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "2. Register (201)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Registration returns 201', () => pm.response.to.have.status(201));",
+            "var data = pm.response.json();",
+            "pm.test('Registration returns token and user', () => { pm.expect(data.token).to.be.a('string'); pm.expect(data.user.email).to.eql(pm.collectionVariables.get('email')); });",
+            "pm.collectionVariables.set('token', data.token);"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Postman Test User\",\"email\":\"{{email}}\",\"password\":\"{{password}}\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "3. Duplicate email returns 409",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('duplicateEmail', pm.collectionVariables.get('email').toUpperCase());"]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('Duplicate email returns 409', () => pm.response.to.have.status(409));"]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Duplicate User\",\"email\":\"{{duplicateEmail}}\",\"password\":\"{{password}}\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "4. Wrong password returns 401",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": ["pm.test('Wrong password returns 401', () => pm.response.to.have.status(401));"]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"{{email}}\",\"password\":\"DefinitelyWrong123\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "5. Correct login returns token",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Login returns 200', () => pm.response.to.have.status(200));",
+            "var data = pm.response.json();",
+            "pm.test('Login returns token and user', () => { pm.expect(data.token).to.be.a('string'); pm.expect(data.user.email).to.eql(pm.collectionVariables.get('email')); });",
+            "pm.collectionVariables.set('token', data.token);"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"{{email}}\",\"password\":\"{{password}}\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "6. Get current user (200)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('/auth/me returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('/auth/me returns registered user', () => pm.expect(pm.response.json().user.email).to.eql(pm.collectionVariables.get('email')));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "7. Task list without token returns 401",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": ["pm.test('Unauthenticated task list returns 401', () => pm.response.to.have.status(401));"]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": { "type": "noauth" },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "8. Create categorized weekly task",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Task creation returns 201', () => pm.response.to.have.status(201));",
+            "var task = pm.response.json();",
+            "pm.test('Task details and category are persisted', () => { pm.expect(task.notes).to.eql('Postman feature-check note'); pm.expect(task.priority).to.eql('high'); pm.expect(task.category).to.eql('Work'); pm.expect(task.recurrence).to.eql('weekly'); pm.expect(task.position).to.be.a('number'); pm.expect(new Date(task.dueDate).toISOString()).to.eql('2030-01-02T00:00:00.000Z'); });",
+            "pm.collectionVariables.set('taskId', task._id);"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"title\":\"Postman feature-check task\",\"notes\":\"Postman feature-check note\",\"priority\":\"high\",\"category\":\"Work\",\"recurrence\":\"weekly\",\"dueDate\":\"2030-01-02T00:00:00.000Z\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "9. Blank task title returns 400",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": ["pm.test('Blank task title returns 400', () => pm.response.to.have.status(400));"]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"title\":\"   \"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "10. Update position and mark task done",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Task update returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('Done and position are updated', () => { pm.expect(pm.response.json().done).to.eql(true); pm.expect(pm.response.json().position).to.eql(0); pm.expect(pm.response.json().completedAt).to.be.a('string'); });"
+          ]
+        }
+      }],
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"position\":0,\"done\":true}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      }
+    },
+    {
+      "name": "11. Verify recurring task copy",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Task list returns 200', () => pm.response.to.have.status(200));",
+            "var tasks = pm.response.json();",
+            "var original = tasks.find((task) => task._id === pm.collectionVariables.get('taskId'));",
+            "var next = tasks.find((task) => task._id !== pm.collectionVariables.get('taskId'));",
+            "pm.test('Completing weekly task creates next occurrence', () => { pm.expect(tasks).to.have.length(2); pm.expect(original.done).to.eql(true); pm.expect(next.category).to.eql('Work'); pm.expect(next.notes).to.eql(original.notes); pm.expect(new Date(next.dueDate).toISOString()).to.eql('2030-01-09T00:00:00.000Z'); });",
+            "pm.collectionVariables.set('nextTaskId', next._id);"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "12. Register second user",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Second user registration returns 201', () => pm.response.to.have.status(201));",
+            "var data = pm.response.json();",
+            "pm.collectionVariables.set('secondToken', data.token);"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Postman Second User\",\"email\":\"{{secondEmail}}\",\"password\":\"{{secondPassword}}\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/auth/register"
+      }
+    },
+    {
+      "name": "13. Second user sees no first-user tasks",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Second user task list returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('Second user task list is empty', () => pm.expect(pm.response.json()).to.have.length(0));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{secondToken}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "14. Block cross-user delete (404)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": ["pm.test('Second user cannot delete owner task', () => pm.response.to.have.status(404));"]
+        }
+      }],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{secondToken}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      }
+    },
+    {
+      "name": "15. Owner deletes original task",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Owner deletion returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('Deletion is confirmed', () => pm.expect(pm.response.json().deleted).to.eql(true));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks/{{taskId}}"
+      }
+    },
+    {
+      "name": "16. Owner deletes recurring task copy",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Recurring task deletion returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('Deletion is confirmed', () => pm.expect(pm.response.json().deleted).to.eql(true));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks/{{nextTaskId}}"
+      }
+    },
+    {
+      "name": "17. Verify empty owner list",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Final task list returns 200', () => pm.response.to.have.status(200));",
+            "pm.test('Owner has no remaining test tasks', () => pm.expect(pm.response.json()).to.have.length(0));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+        "url": "{{baseUrl}}/tasks"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api", "type": "string" }
+  ]
+}
